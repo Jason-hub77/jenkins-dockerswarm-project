@@ -45,13 +45,16 @@ pipeline {
             steps {
                 echo 'Creating Infrastructure for the App on AWS Cloud'
                 sh "aws cloudformation create-stack --region ${AWS_REGION} --stack-name ${AWS_STACK_NAME} --capabilities CAPABILITY_IAM --template-body file://${CFN_TEMPLATE} --parameters ParameterKey=KeyPairName,ParameterValue=${CFN_KEYPAIR}"
+
                 script {
                     
                     while(true) {
                         
                         echo "Docker Grand Master is not UP and running yet. Will try to reach again after 10 seconds..."
                         sleep(10)
+
                         ip = sh(script:'aws ec2 describe-instances --region ${AWS_REGION} --filters Name=tag-value,Values=docker-grand-master Name=tag-value,Values=${AWS_STACK_NAME} --query Reservations[*].Instances[*].[PublicIpAddress] --output text | sed "s/\\s*None\\s*//g"', returnStdout:true).trim()
+
                         if (ip.length() >= 7) {
                             echo "Docker Grand Master Public Ip Address Found: $ip"
                             env.MASTER_INSTANCE_PUBLIC_IP = "$ip"
@@ -62,12 +65,14 @@ pipeline {
                 
             }
         }
+
         stage('Test the Infrastructure') {
             
             steps {
                 echo "Testing if the Docker Swarm is ready or not, by checking Viz App on Grand Master with Public Ip Address: ${MASTER_INSTANCE_PUBLIC_IP}:8080"
                 script {
                     while(true) {
+
                         try {
                           sh "curl -s --connect-timeout 60 ${MASTER_INSTANCE_PUBLIC_IP}:8080"
                           echo "Successfully connected to Viz App."
@@ -82,6 +87,7 @@ pipeline {
                 
             }
         }
+
         stage('Deploy App on Docker Swarm'){
             environment {
                 MASTER_INSTANCE_ID=sh(script:'aws ec2 describe-instances --region ${AWS_REGION} --filters Name=tag-value,Values=docker-grand-master Name=tag-value,Values=${AWS_STACK_NAME} --query Reservations[*].Instances[*].[InstanceId] --output text', returnStdout:true).trim()
@@ -102,6 +108,7 @@ pipeline {
             sh 'docker image prune -af'
         }
         failure {
+
             echo 'Delete the Image Repository on ECR due to the Failure'
             sh """
                 aws ecr delete-repository \
